@@ -100,3 +100,57 @@ def download_file(media_url, media_sid):
             for chunk in response:
                 f.write(chunk)
         return image_path
+
+
+def find_file_in_directory(access_token, file_name, directory_id):
+    list_files_url = 'https://www.googleapis.com/drive/v3/files'
+    headers = {'Authorization': 'Bearer ' + access_token}
+    params = {
+        'q': f"'{directory_id}' in parents and name='{file_name}' and mimeType='text/plain'",
+        'fields': 'files(id, name)'
+    }
+    response = requests.get(list_files_url, headers=headers, params=params)
+    if response.status_code == 200:
+        files = response.json().get('files', [])
+        if files:
+            return files[0]['id']
+        return None
+    else:
+        return None
+
+
+def upload_text_to_drive(access_token, text, file_name, directory_id):
+    upload_url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart'
+    headers = {'Authorization': 'Bearer ' + access_token}
+    para = {
+        "name": file_name,
+        "parents": [directory_id]
+    }
+    files = {
+        'data': ('metadata', json.dumps(para), 'application/json; charset=UTF-8'),
+        'file': ('file', text, 'text/plain')
+    }
+    response = requests.post(upload_url, headers=headers, files=files)
+    return response.status_code == 200
+
+
+def append_text_to_drive_file(access_token, file_id, new_text):
+    get_file_url = f'https://www.googleapis.com/drive/v3/files/{file_id}?alt=media'
+    headers = {'Authorization': 'Bearer ' + access_token}
+    response = requests.get(get_file_url, headers=headers)
+    if response.status_code == 200:
+        current_text = response.text
+        updated_text = current_text + "\n" + new_text
+        upload_url = f'https://www.googleapis.com/upload/drive/v3/files/{file_id}?uploadType=media'
+        response = requests.patch(upload_url, headers=headers, data=updated_text)
+        return response.status_code == 200
+    return False
+
+
+def upload_or_append_text_to_drive(access_token, text, file_name, directory_id):
+    file_id = find_file_in_directory(access_token, file_name, directory_id)
+    if file_id:
+        success = append_text_to_drive_file(access_token, file_id, text)
+    else:
+        success = upload_text_to_drive(access_token, text, file_name, directory_id)
+    return success
